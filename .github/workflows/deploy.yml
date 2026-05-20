@@ -10,8 +10,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+
+      - name: Run tests
+        run: python -m pytest tests/ -v
+
   deploy-prod:
     name: Deploy to prod
+    needs: test
     runs-on: [self-hosted, local]
     timeout-minutes: 10
     steps:
@@ -45,6 +63,7 @@ jobs:
 
   sync-hf:
     name: Sync to HuggingFace Space
+    needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
