@@ -163,7 +163,14 @@ def stream_chat(message: str, history: list[dict]):
         yield accumulated
 
 
-ARCHITECTURE_HTML = (Path(__file__).parent / "architecture.html").read_text(encoding="utf-8")
+_arch_raw = (Path(__file__).parent / "architecture.html").read_text(encoding="utf-8")
+import html as _html_mod
+_arch_escaped = _html_mod.escape(_arch_raw, quote=True)
+ARCHITECTURE_HTML = (
+    f'<iframe srcdoc="{_arch_escaped}" '
+    'style="width:100%;height:700px;border:none;border-radius:12px;" '
+    'sandbox="allow-scripts allow-same-origin"></iframe>'
+)
 
 
 DATASETS_MD = """
