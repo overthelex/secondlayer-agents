@@ -33,3 +33,9 @@ def test_app_has_iframe_srcdoc():
     import app
     assert "iframe" in app.ARCHITECTURE_HTML
     assert "srcdoc" in app.ARCHITECTURE_HTML
+
+
+def test_stream_chat_is_async_generator():
+    import app
+    import inspect
+    assert inspect.isasyncgenfunction(app.stream_chat)
