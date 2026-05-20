@@ -21,7 +21,6 @@ jobs:
           host: ${{ secrets.PROD_HOST }}
           username: ubuntu
           key: ${{ secrets.PROD_SSH_KEY }}
-          script_stop: true
           command_timeout: 5m
           script: |
             set -euo pipefail
