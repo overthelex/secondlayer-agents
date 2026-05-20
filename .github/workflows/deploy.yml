@@ -22,7 +22,12 @@ jobs:
 
           ssh prod bash -l <<'REMOTE'
           set -euo pipefail
-          cd ~/SecondLayer/deployment
+          cd ~/SecondLayer
+
+          echo "=== Pulling latest deployment config ==="
+          git pull origin main
+
+          cd deployment
 
           docker compose -f docker-compose.prod.yml \
             --env-file .env.prod \
