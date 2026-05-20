@@ -39,9 +39,9 @@ jobs:
             up -d legal-intern-prod
 
           echo "=== Waiting for health ==="
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:7860/ > /dev/null 2>&1; then
-              echo "Container healthy after ${i}s"
+          for i in $(seq 1 45); do
+            if docker exec legal-intern-prod python -c "import urllib.request; urllib.request.urlopen('http://localhost:7860/')" 2>/dev/null; then
+              echo "Container healthy after $((i*2))s"
               exit 0
             fi
             sleep 2
