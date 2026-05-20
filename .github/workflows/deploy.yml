@@ -12,42 +12,40 @@ concurrency:
 jobs:
   deploy-prod:
     name: Deploy to prod
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, local]
     timeout-minutes: 10
     steps:
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.PROD_HOST }}
-          username: ubuntu
-          key: ${{ secrets.PROD_SSH_KEY }}
-          command_timeout: 5m
-          script: |
-            set -euo pipefail
-            echo "=== Rebuilding legal-intern container ==="
-            cd ~/SecondLayer/deployment
+        run: |
+          set -euo pipefail
+          echo "=== Rebuilding legal-intern container ==="
 
-            docker compose -f docker-compose.prod.yml \
-              --env-file .env.prod \
-              build --no-cache legal-intern-prod
+          ssh prod bash -l <<'REMOTE'
+          set -euo pipefail
+          cd ~/SecondLayer/deployment
 
-            echo "=== Restarting container ==="
-            docker compose -f docker-compose.prod.yml \
-              --env-file .env.prod \
-              up -d legal-intern-prod
+          docker compose -f docker-compose.prod.yml \
+            --env-file .env.prod \
+            build --no-cache legal-intern-prod
 
-            echo "=== Waiting for health ==="
-            for i in $(seq 1 30); do
-              if curl -sf http://localhost:7860/ > /dev/null 2>&1; then
-                echo "Container healthy after ${i}s"
-                exit 0
-              fi
-              sleep 2
-            done
+          echo "=== Restarting container ==="
+          docker compose -f docker-compose.prod.yml \
+            --env-file .env.prod \
+            up -d legal-intern-prod
 
-            echo "=== Health check failed, dumping logs ==="
-            docker logs --tail 30 legal-intern-prod
-            exit 1
+          echo "=== Waiting for health ==="
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:7860/ > /dev/null 2>&1; then
+              echo "Container healthy after ${i}s"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "=== Health check failed, dumping logs ==="
+          docker logs --tail 30 legal-intern-prod
+          exit 1
+          REMOTE
 
   sync-hf:
     name: Sync to HuggingFace Space
