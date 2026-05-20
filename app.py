@@ -7,17 +7,21 @@ Shows the agent flow, state evolution, and final consultation.
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import asdict
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 import gradio as gr
 
-from src.legal_intern.state.research_state import (
+from legal_intern.state.research_state import (
     ConsultationState,
     LegalEvidence,
     LegalHypothesis,
     LegalStrategy,
 )
-from src.legal_intern.rendering import render_state_md
+from legal_intern.rendering import render_state_md
 
 
 EXAMPLE_QUESTIONS = [
