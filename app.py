@@ -253,7 +253,6 @@ def build_app() -> gr.Blocks:
                     title=None,
                     chatbot=gr.Chatbot(
                         height=600,
-                        type="messages",
                         placeholder="Опишіть правову ситуацію -- 9 агентів проаналізують та підготують консультацію",
                     ),
                     textbox=gr.Textbox(
