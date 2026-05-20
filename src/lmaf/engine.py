@@ -1,20 +1,4 @@
-"""LegalIntern main loop engine.
-
-Nine-agent pipeline for complex legal consultations:
-
-1. Surveyor   -- maps the legal landscape (runs once)
-2. Planner    -- produces/revises research strategy
-3. Orchestrator -- dispatches tasks to researcher or analyst
-4. Researcher -- finds case law, legislation, doctrine (via SecondLayer MCP)
-5. Analyst    -- computes deadlines, penalties, procedural checks
-6. Reviewer   -- adversarial verification of evidence (auto-triggered)
-7. Critic     -- periodic strategy audit (every N iterations)
-8. Adjudicator -- resolves inter-agent disagreements
-9. Formatter  -- produces final consultation document
-
-No agent carries conversation history. All state lives in ConsultationState.
-The workspace is git-versioned for full reproducibility.
-"""
+"""LMAF -- Legal Multi-Agent Framework main loop engine."""
 
 from __future__ import annotations
 
@@ -43,8 +27,8 @@ from .state.research_state import ConsultationState, CritiqueStatus
 console = Console()
 
 
-class LegalIntern:
-    """Main loop for the LegalIntern consultation system."""
+class LMAF:
+    """Main loop for the Legal Multi-Agent Framework."""
 
     def __init__(self, question: str, config: Config | None = None) -> None:
         self.config = config or Config.from_env()
@@ -70,7 +54,7 @@ class LegalIntern:
 
     async def run(self) -> str:
         """Execute the full consultation pipeline. Returns the final answer."""
-        console.print(Panel(f"[bold]LegalIntern[/bold]\n{self.state.client_question[:200]}"))
+        console.print(Panel(f"[bold]LMAF[/bold]\n{self.state.client_question[:200]}"))
 
         # Phase 1: Survey
         console.print("[dim]Phase 1: Surveyor[/dim]")

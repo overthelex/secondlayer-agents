@@ -1,4 +1,4 @@
-"""LegalIntern Gradio chat app.
+"""LMAF (Legal Multi-Agent Framework) Gradio chat app.
 
 Chat interface for multi-agent legal consultation pipeline.
 On prod (agents.legal.org.ua): runs the real pipeline with LLM + SecondLayer API.
@@ -35,11 +35,11 @@ def has_api_keys() -> bool:
 
 async def _run_pipeline(question: str):
     """Run the multi-agent pipeline and yield status updates."""
-    from legal_intern.core.config import Config
-    from legal_intern.engine import LegalIntern
+    from lmaf.core.config import Config
+    from lmaf.engine import LMAF
 
     config = Config.from_env()
-    intern = LegalIntern(question, config)
+    intern = LMAF(question, config)
 
     yield "Surveyor: аналізую правовий ландшафт..."
     result = await intern.surveyor.run(intern.state)
@@ -85,7 +85,7 @@ async def _run_pipeline(question: str):
                     await intern.planner.run(
                         intern.state, revision_critique=critique.details
                     )
-                    from legal_intern.state.research_state import CritiqueStatus
+                    from lmaf.state.research_state import CritiqueStatus
                     critique.status = CritiqueStatus.RESOLVED
 
             if "можна завершувати: True" in critic_result.summary:
@@ -164,7 +164,7 @@ def stream_chat(message: str, history: list[dict]):
 
 
 ARCHITECTURE_MD = """
-## Архітектура LegalIntern
+## Архітектура LMAF
 
 Дев'ять спеціалізованих LLM-агентів працюють у циклі. Кожен агент починає з чистого контексту.
 Весь стан зберігається у структурованому об'єкті `ConsultationState`.
@@ -237,9 +237,9 @@ DATASETS_MD = """
 
 
 def build_app() -> gr.Blocks:
-    with gr.Blocks(title="LegalIntern") as app:
+    with gr.Blocks(title="LMAF") as app:
         gr.Markdown(
-            "# LegalIntern\n"
+            "# LMAF -- Legal Multi-Agent Framework\n"
             "### Мульти-агентна система для складних правових консультацій\n\n"
             "Дев'ять спеціалізованих LLM-агентів аналізують правові питання, "
             "шукають судову практику у 100М+ рішень ЄДРСР та формують структуровану консультацію.\n\n"

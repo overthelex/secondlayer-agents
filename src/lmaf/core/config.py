@@ -1,4 +1,4 @@
-"""Configuration for the LegalIntern system."""
+"""Configuration for the LMAF system."""
 
 from __future__ import annotations
 
