@@ -1,0 +1,67 @@
+name: Deploy LegalIntern
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-legal-intern
+  cancel-in-progress: false
+
+jobs:
+  deploy-prod:
+    name: Deploy to prod
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ubuntu
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script_stop: true
+          command_timeout: 5m
+          script: |
+            set -euo pipefail
+            echo "=== Rebuilding legal-intern container ==="
+            cd ~/SecondLayer/deployment
+
+            docker compose -f docker-compose.prod.yml \
+              --env-file .env.prod \
+              build --no-cache legal-intern-prod
+
+            echo "=== Restarting container ==="
+            docker compose -f docker-compose.prod.yml \
+              --env-file .env.prod \
+              up -d legal-intern-prod
+
+            echo "=== Waiting for health ==="
+            for i in $(seq 1 30); do
+              if curl -sf http://localhost:7860/ > /dev/null 2>&1; then
+                echo "Container healthy after ${i}s"
+                exit 0
+              fi
+              sleep 2
+            done
+
+            echo "=== Health check failed, dumping logs ==="
+            docker logs --tail 30 legal-intern-prod
+            exit 1
+
+  sync-hf:
+    name: Sync to HuggingFace Space
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push to HuggingFace
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git remote add hf https://overthelex:${HF_TOKEN}@huggingface.co/spaces/overthelex/legal-intern || true
+          git push hf main --force
