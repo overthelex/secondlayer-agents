@@ -15,7 +15,7 @@ class Config:
 
     # LLM provider
     default_provider: str = "anthropic"
-    default_model: str = "claude-sonnet-4-6"
+    default_model: str = "us.anthropic.claude-sonnet-4-6-20250514-v1:0"
 
     # Per-agent model overrides
     model_overrides: dict[str, str] = field(default_factory=dict)
@@ -37,6 +37,11 @@ class Config:
     anthropic_api_key: str = ""
     openai_api_key: str = ""
 
+    # AWS Bedrock
+    aws_region: str = ""
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+
     def model_for(self, agent_role: str) -> str:
         return self.model_overrides.get(agent_role, self.default_model)
 
@@ -56,4 +61,7 @@ class Config:
         config.secondlayer_api_url = os.environ.get(
             "SECONDLAYER_API_URL", config.secondlayer_api_url
         )
+        config.aws_region = os.environ.get("AWS_REGION", "")
+        config.aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID", "")
+        config.aws_secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
         return config

@@ -26,7 +26,11 @@ EXAMPLES = [
 
 
 def has_api_keys() -> bool:
-    return bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY"))
+    return bool(
+        os.environ.get("AWS_REGION")
+        or os.environ.get("ANTHROPIC_API_KEY")
+        or os.environ.get("OPENAI_API_KEY")
+    )
 
 
 async def _run_pipeline(question: str):

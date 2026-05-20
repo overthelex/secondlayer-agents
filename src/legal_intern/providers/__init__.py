@@ -1,4 +1,4 @@
-"""LLM provider abstraction layer."""
+"""LLM provider abstraction layer -- AWS Bedrock only."""
 
 from __future__ import annotations
 
@@ -31,21 +31,12 @@ async def call_llm(
     json_mode: bool = False,
     tools: list[dict] | None = None,
 ) -> LLMResponse:
-    """Call the LLM provider configured for this agent role.
-
-    Each agent call starts from a fresh context -- no conversation history.
-    """
+    """Call Anthropic via AWS Bedrock. No direct API calls."""
     model = config.model_for(model_key)
-
-    if config.default_provider == "anthropic" or model.startswith("claude"):
-        return await _call_anthropic(config, system, user, model, json_mode, tools)
-    elif config.default_provider == "openai" or model.startswith("gpt"):
-        return await _call_openai(config, system, user, model, json_mode, tools)
-    else:
-        raise ValueError(f"Unknown provider: {config.default_provider}")
+    return await _call_bedrock(config, system, user, model, json_mode, tools)
 
 
-async def _call_anthropic(
+async def _call_bedrock(
     config: Config,
     system: str,
     user: str,
@@ -55,7 +46,11 @@ async def _call_anthropic(
 ) -> LLMResponse:
     import anthropic
 
-    client = anthropic.AsyncAnthropic(api_key=config.anthropic_api_key)
+    client = anthropic.AsyncAnthropicBedrock(
+        aws_region=config.aws_region,
+        aws_access_key=config.aws_access_key_id or None,
+        aws_secret_key=config.aws_secret_access_key or None,
+    )
 
     kwargs: dict[str, Any] = {
         "model": model,
@@ -77,7 +72,6 @@ async def _call_anthropic(
     parsed = None
     if json_mode:
         try:
-            # Try to extract JSON from the response
             text = content.strip()
             if text.startswith("```"):
                 text = text.split("```")[1]
@@ -89,50 +83,6 @@ async def _call_anthropic(
             parsed = None
 
     tokens = response.usage.input_tokens + response.usage.output_tokens
-
-    return LLMResponse(
-        content=content,
-        tokens_used=tokens,
-        parsed_json=parsed,
-    )
-
-
-async def _call_openai(
-    config: Config,
-    system: str,
-    user: str,
-    model: str,
-    json_mode: bool,
-    tools: list[dict] | None,
-) -> LLMResponse:
-    from openai import AsyncOpenAI
-
-    client = AsyncOpenAI(api_key=config.openai_api_key)
-
-    kwargs: dict[str, Any] = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
-        "max_tokens": 8192,
-    }
-
-    if json_mode:
-        kwargs["response_format"] = {"type": "json_object"}
-
-    response = await client.chat.completions.create(**kwargs)
-
-    content = response.choices[0].message.content or ""
-
-    parsed = None
-    if json_mode:
-        try:
-            parsed = json.loads(content)
-        except json.JSONDecodeError:
-            parsed = None
-
-    tokens = (response.usage.prompt_tokens + response.usage.completion_tokens) if response.usage else 0
 
     return LLMResponse(
         content=content,
