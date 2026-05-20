@@ -18,88 +18,102 @@ tags:
 
 # LMAF -- Legal Multi-Agent Framework
 
-A multi-agent framework for **complex legal consultations** over Ukrainian court decisions and legislation.
+Nine specialised LLM agents analyse Ukrainian legal questions, search 100M+ court decisions in the [EDRSR](https://reyestr.court.gov.ua/) via [SecondLayer](https://legal.org.ua), and produce structured legal consultations with citations to legislation and case law.
 
-Built for the legal domain with access to 100M+ Ukrainian court decisions via [SecondLayer](https://legal.org.ua).
+**[Live demo](https://agents.legal.org.ua)** &nbsp;|&nbsp; **[HuggingFace Space](https://huggingface.co/spaces/overthelex/lmaf)** &nbsp;|&nbsp; **[SecondLayer Platform](https://legal.org.ua)**
 
-## Architecture
+## How It Works
 
-Nine specialised LLM agents work in a loop, each starting from a fresh context (no conversation history). All state lives in a structured `ConsultationState` object. The workspace is git-versioned for full reproducibility.
+A client question goes through four phases. Every agent starts from a fresh context (no conversation history) -- all state lives in a structured `ConsultationState` object, and every iteration is git-committed for reproducibility.
 
 ```
-                    ┌─────────────┐
-                    │   Client    │
-                    │  Question   │
-                    └──────┬──────┘
-                           │
-                    ┌──────▼──────┐
-                    │  Surveyor   │  Maps legal landscape (once)
-                    └──────┬──────┘
-                           │
-                    ┌──────▼──────┐
-                    │   Planner   │  Research strategy
-                    └──────┬──────┘
-                           │
-              ┌────────────▼────────────┐
-              │      Orchestrator       │  Dispatches tasks
-              └───┬─────────────────┬───┘
-                  │                 │
-           ┌──────▼──────┐  ┌──────▼──────┐
-           │ Researcher  │  │   Analyst   │
-           │ (case law,  │  │ (deadlines, │
-           │ legislation)│  │  penalties) │
-           └──────┬──────┘  └──────┬──────┘
-                  │                 │
-              ┌───▼─────────────────▼───┐
-              │       Reviewer          │  Adversarial verification
-              └────────────┬────────────┘
-                           │
-              ┌────────────▼────────────┐
-              │    Critic (periodic)    │  Strategy audit
-              └──────┬──────────┬───────┘
-                     │          │
-              ┌──────▼──┐ ┌────▼────────┐
-              │ Planner │ │ Adjudicator │  Resolve disputes
-              │(revise) │ └─────────────┘
-              └─────────┘
-                           │
-              ┌────────────▼────────────┐
-              │       Formatter         │  Final consultation
-              └─────────────────────────┘
+Phase 1        Phase 2                Phase 3                         Phase 4
+                              RESEARCH LOOP (up to 15 iterations)
+                         ┌─────────────────────────────────────┐
+Question ─> Surveyor ─> Planner ─> Orchestrator ─────────────┐ │ ─> Formatter ─> Consultation
+                           ^       │          │              │ │
+                           │   Researcher   Analyst          │ │
+                           │       │          │              │ │
+                           │       └──> Reviewer ────────────┘ │
+                           │              │                    │
+                           │        Critic (every 3 iter.)     │
+                           │        │    │                     │
+                           └────────┘  Adjudicator ────────────┘
+                         └─────────────────────────────────────┘
 ```
 
-### Agent Roles
+An interactive D3.js version of this diagram is available on the [Architecture tab](https://agents.legal.org.ua) of the live demo.
 
-| Agent | Role | secondlayer-core Equivalent |
-|-------|------|---------------------------|
-| **Surveyor** | Maps legal landscape, identifies relevant areas of law | IntentClassifier + QueryPlanner |
-| **Planner** | Produces/revises research strategy | ExecutionPlan generation |
-| **Orchestrator** | Dispatches tasks, formulates hypotheses | ChatService agentic loop |
-| **Researcher** | Finds case law, legislation, doctrine via SecondLayer MCP | Tool calls (search, legislation) |
-| **Analyst** | Computes deadlines, penalties, procedural checks | Calculation tool calls |
-| **Reviewer** | Adversarial verification of evidence | CitationValidator + HallucinationGuard |
-| **Critic** | Periodic strategy and coherence audit | *New capability* |
-| **Adjudicator** | Resolves inter-agent disagreements | *New capability* |
-| **Formatter** | Produces structured legal consultation | Response synthesis |
+## Agents
 
-### Key Design Decisions
+| # | Agent | When | What it does |
+|---|-------|------|-------------|
+| 1 | **Surveyor** | Once, at start | Maps the legal landscape: jurisdiction, applicable legislation, Supreme Court positions, risks |
+| 2 | **Planner** | Once + on strategy critique | Produces and revises the research strategy and key legal questions |
+| 3 | **Orchestrator** | Every iteration | Reads state, formulates hypotheses, dispatches tasks to Researcher or Analyst |
+| 4 | **Researcher** | On dispatch | Searches case law, legislation, and doctrine via SecondLayer API (100M+ court decisions) |
+| 5 | **Analyst** | On dispatch | Computes deadlines, penalties (Art. 549-552 CC), 3% annual (Art. 625 CC), inflation losses |
+| 6 | **Reviewer** | After each research/analysis | Adversarial verification: checks citations exist, logic holds, evidence is current |
+| 7 | **Critic** | Every 3 iterations | Senior legal advisor audit: strategy gaps, coherence, missing counterarguments |
+| 8 | **Adjudicator** | On hypothesis conflict | Resolves disagreements between agents; can demote an established hypothesis back to working |
+| 9 | **Formatter** | Once, after loop | Produces the final structured consultation with legislation references and case law citations |
 
-1. **No agent carries conversation history** -- each call starts from a fresh context with the current `ConsultationState` rendered as text. This prevents context contamination and allows any agent to be swapped or retried independently.
+## ConsultationState
 
-2. **Structured state** -- `ConsultationState` tracks hypotheses, evidence, critiques, and their relationships. Agents mutate state via typed operations, not free-form text.
+All agents read and mutate a single state object:
 
-3. **Git-versioned workspace** -- every iteration creates a commit, making the full research process reproducible and auditable.
+| Field | Type | Description |
+|-------|------|-------------|
+| `client_question` | str | Original question |
+| `jurisdiction` | str | civil, commercial, administrative, criminal |
+| `survey_summary` | str | Legal landscape from Surveyor |
+| `strategy` | LegalStrategy | Research plan from Planner |
+| `hypotheses` | LegalHypothesis[] | Working/established/refuted legal positions |
+| `evidence` | LegalEvidence[] | Case law, legislation, doctrine, computations |
+| `questions` | ResearchQuestion[] | Open/resolved research questions |
+| `critiques` | Critique[] | Active/resolved strategy and reasoning critiques |
+| `answer` | str | Final formatted consultation |
 
-4. **SecondLayer MCP bridge** -- agents access 100M+ court decisions, legislation, and Supreme Court positions through the SecondLayer API.
+## Critique Routing
+
+When the Critic fires (every `critic_every_n` iterations), critiques are routed:
+
+- **strategy** critique --> Planner (revise research strategy)
+- **completeness** critique --> Orchestrator (generate new research questions)
+- **hypothesis** critique --> Adjudicator (resolve conflict, may demote hypothesis)
+
+## Project Structure
+
+```
+secondlayer-agents/
+├── app.py                  # Gradio chat interface (prod + HF Space)
+├── architecture.html       # D3.js interactive architecture diagram
+├── src/lmaf/
+│   ├── engine.py           # Main 4-phase pipeline loop (LMAF class)
+│   ├── agents/             # 9 agent implementations (BaseAgent subclasses)
+│   ├── state/              # ConsultationState, LoopState
+│   ├── core/               # Config, WorkspaceManager (git-versioned)
+│   ├── providers/          # LLM provider (AWS Bedrock)
+│   ├── tools/              # SecondLayer API bridge (HTTP client)
+│   ├── control/            # Loop control logic
+│   ├── verification/       # Evidence verification utilities
+│   └── rendering/          # State rendering for agent prompts
+├── problems/               # Example legal problems (YAML)
+├── tests/                  # pytest suite (state, config, app)
+└── .github/workflows/      # CI/CD: test --> deploy prod + sync HF
+```
 
 ## Quick Start
 
 ```bash
-# Install
 pip install -e .
 
-# Set API keys
-export ANTHROPIC_API_KEY=sk-...
+# AWS Bedrock (required)
+export AWS_REGION=eu-central-1
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+
+# SecondLayer API (for case law and legislation search)
 export SECONDLAYER_API_KEY=...
 
 # Run a consultation
@@ -111,23 +125,34 @@ lmaf problems/consumer_penalty.yaml
 
 ## Example Problems
 
-| Problem | Difficulty | Description |
-|---------|-----------|-------------|
-| `consumer_penalty.yaml` | Medium | Penalty and interest calculation for late payment |
-| `labor_dismissal.yaml` | Hard | Challenging unlawful dismissal during martial law |
-| `property_dispute.yaml` | Hard | Property rights in unregistered partnership |
+| Problem | Domain | Question |
+|---------|--------|----------|
+| `consumer_penalty.yaml` | Civil | Penalty + 3% annual + inflation for late payment of 150K UAH goods |
+| `labor_dismissal.yaml` | Labor | Challenging dismissal under Art. 40(1) during martial law |
+| `property_dispute.yaml` | Family/Property | Property rights in an unregistered civil partnership (8 years) |
+
+## CI/CD
+
+Every push to `main` triggers:
+
+1. **Test** -- `pytest` on ubuntu-latest (36 tests: state, config, app)
+2. **Deploy to prod** -- SSH to prod, rebuild Docker container, health check
+3. **Sync to HuggingFace** -- force-push to `overthelex/lmaf` Space
 
 ## Data Sources
 
-- [EDRSR](https://reyestr.court.gov.ua/) -- 100M+ Ukrainian court decisions
-- [Verkhovna Rada](https://zakon.rada.gov.ua/) -- Ukrainian legislation
-- [overthelex/ua-case-outcome-6m](https://huggingface.co/datasets/overthelex/ua-case-outcome-6m) -- 6.7M court decisions dataset
-- [overthelex/ukrainian-court-decisions](https://huggingface.co/datasets/overthelex/ukrainian-court-decisions) -- 428K balanced benchmark
+| Source | What | Scale |
+|--------|------|-------|
+| [EDRSR](https://reyestr.court.gov.ua/) | Ukrainian court decisions | 100M+ documents |
+| [Verkhovna Rada](https://zakon.rada.gov.ua/) | Ukrainian legislation | Full corpus |
+| [ua-case-outcome-6m](https://huggingface.co/datasets/overthelex/ua-case-outcome-6m) | Court decisions dataset | 6.7M decisions |
+| [ukrainian-court-decisions](https://huggingface.co/datasets/overthelex/ukrainian-court-decisions) | Balanced benchmark | 428K decisions |
+| [edrsr-citation-graph-16m](https://huggingface.co/datasets/overthelex/edrsr-citation-graph-16m) | Citation graph | 16M edges |
 
 ## Related Papers
 
-- [Temporal Decay of Co-Citation Predictability](https://arxiv.org/abs/2605.17639)
-- [A Citation Graph from 100M Court Decisions](https://arxiv.org/abs/2605.15362)
+- [Temporal Decay of Co-Citation Predictability in Legal Statute Retrieval](https://arxiv.org/abs/2605.17639)
+- [A Citation Graph from 100 Million Court Decisions](https://arxiv.org/abs/2605.15362)
 - [Tokenizer Fertility and Zero-Shot Performance on Ukrainian Legal Text](https://arxiv.org/abs/2605.14890)
 
 ## License
