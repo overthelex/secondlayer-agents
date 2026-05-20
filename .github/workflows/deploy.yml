@@ -15,42 +15,33 @@ jobs:
     runs-on: [self-hosted, local]
     timeout-minutes: 10
     steps:
-      - name: Deploy via SSH
+      - name: Pull deployment config
+        run: ssh prod "cd ~/SecondLayer && git pull origin main"
+
+      - name: Build container
         run: |
-          set -euo pipefail
-          echo "=== Rebuilding legal-intern container ==="
+          ssh prod "cd ~/SecondLayer/deployment && \
+            docker compose -f docker-compose.prod.yml --env-file .env.prod \
+            build --no-cache legal-intern-prod"
 
-          ssh prod bash -l <<'REMOTE'
-          set -euo pipefail
-          cd ~/SecondLayer
+      - name: Start container
+        run: |
+          ssh prod "cd ~/SecondLayer/deployment && \
+            docker compose -f docker-compose.prod.yml --env-file .env.prod \
+            up -d legal-intern-prod"
 
-          echo "=== Pulling latest deployment config ==="
-          git pull origin main
-
-          cd deployment
-
-          docker compose -f docker-compose.prod.yml \
-            --env-file .env.prod \
-            build --no-cache legal-intern-prod
-
-          echo "=== Restarting container ==="
-          docker compose -f docker-compose.prod.yml \
-            --env-file .env.prod \
-            up -d legal-intern-prod
-
-          echo "=== Waiting for health ==="
+      - name: Health check
+        run: |
           for i in $(seq 1 45); do
-            if docker exec legal-intern-prod python -c "import urllib.request; urllib.request.urlopen('http://localhost:7860/')" 2>/dev/null; then
+            if ssh prod "docker exec legal-intern-prod python -c \"import urllib.request; urllib.request.urlopen('http://localhost:7860/')\"" 2>/dev/null; then
               echo "Container healthy after $((i*2))s"
               exit 0
             fi
             sleep 2
           done
-
-          echo "=== Health check failed, dumping logs ==="
-          docker logs --tail 30 legal-intern-prod
+          echo "Health check failed"
+          ssh prod "docker logs --tail 30 legal-intern-prod" || true
           exit 1
-          REMOTE
 
   sync-hf:
     name: Sync to HuggingFace Space
