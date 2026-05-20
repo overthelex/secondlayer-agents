@@ -38,6 +38,8 @@ async def _run_pipeline(question: str):
     from lmaf.state.research_state import CritiqueStatus
 
     config = Config.from_env()
+    config.max_iterations = 2
+    config.critic_every_n = 2
     lmaf = LMAF(question, config)
 
     yield "Surveyor: аналізую правовий ландшафт..."
