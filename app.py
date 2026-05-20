@@ -163,58 +163,7 @@ def stream_chat(message: str, history: list[dict]):
         yield accumulated
 
 
-ARCHITECTURE_MD = """
-## Архітектура LMAF
-
-Дев'ять спеціалізованих LLM-агентів працюють у циклі. Кожен агент починає з чистого контексту.
-Весь стан зберігається у структурованому об'єкті `ConsultationState`.
-
-```
-Запит клієнта
-     │
-     ▼
-┌─────────────┐
-│  Surveyor   │  Огляд правового ландшафту
-└──────┬──────┘
-       ▼
-┌─────────────┐
-│   Planner   │  Стратегія дослідження
-└──────┬──────┘
-       ▼
-┌─────────────┐     ┌────────────┐
-│Orchestrator │────►│ Researcher │  Судова практика, НПА
-│ (dispatch)  │────►│  Analyst   │  Обчислення, строки
-└──────┬──────┘     └─────┬──────┘
-       │                  │
-       ▼                  ▼
-┌─────────────┐   ┌────────────┐
-│  Reviewer   │   │   Critic   │  Аудит стратегії
-│(верифікація)│   │ (periodic) │
-└──────┬──────┘   └─────┬──────┘
-       │                │
-       ▼                ▼
-┌─────────────┐  ┌──────────────┐
-│ Adjudicator │  │   Planner    │
-│  (арбітраж) │  │  (revision)  │
-└──────┬──────┘  └──────────────┘
-       ▼
-┌─────────────┐
-│  Formatter  │  Фінальна консультація
-└─────────────┘
-```
-
-| Агент | Роль | Аналог в secondlayer-core |
-|-------|------|--------------------------|
-| **Surveyor** | Карта правового ландшафту | IntentClassifier + QueryPlanner |
-| **Planner** | Стратегія дослідження | Генерація ExecutionPlan |
-| **Orchestrator** | Координація та гіпотези | Агентний цикл ChatService |
-| **Researcher** | Пошук практики та НПА | Виклики інструментів |
-| **Analyst** | Обчислення строків, сум | Калькуляційні інструменти |
-| **Reviewer** | Верифікація доказів | CitationValidator + HallucinationGuard |
-| **Critic** | Аудит стратегії | *Нова можливість* |
-| **Adjudicator** | Арбітраж розбіжностей | *Нова можливість* |
-| **Formatter** | Оформлення консультації | Синтез відповіді |
-"""
+ARCHITECTURE_HTML = (Path(__file__).parent / "architecture.html").read_text(encoding="utf-8")
 
 
 DATASETS_MD = """
@@ -265,7 +214,7 @@ def build_app() -> gr.Blocks:
                 )
 
             with gr.Tab("Архітектура"):
-                gr.Markdown(ARCHITECTURE_MD)
+                gr.HTML(ARCHITECTURE_HTML)
 
             with gr.Tab("Датасети"):
                 gr.Markdown(DATASETS_MD)

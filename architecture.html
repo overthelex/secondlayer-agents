@@ -1,0 +1,562 @@
+<div id="lmaf-arch"></div>
+
+<style>
+  #lmaf-arch {
+    width: 100%;
+    font-family: system-ui, -apple-system, sans-serif;
+    color: #e0e0e0;
+    background: #1a1a2e;
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Filter bar */
+  #lmaf-arch .filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 20px 10px;
+    font-size: 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  #lmaf-arch .filter-bar__label {
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #888;
+    margin-right: 4px;
+  }
+  #lmaf-arch .filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: transparent;
+    color: #999;
+    cursor: pointer;
+    transition: all .2s ease;
+    font-size: 12px;
+    font-family: inherit;
+  }
+  #lmaf-arch .filter-chip:hover {
+    color: #fff;
+    border-color: rgba(255,255,255,0.4);
+  }
+  #lmaf-arch .filter-chip.is-active {
+    color: #fff;
+    border-color: currentColor;
+    background: rgba(255,255,255,0.06);
+  }
+  #lmaf-arch .chip-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    flex: 0 0 auto;
+  }
+
+  /* SVG */
+  #lmaf-arch svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  /* Tooltip */
+  #lmaf-arch .arch-tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: rgba(20,20,40,0.95);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 13px;
+    line-height: 1.5;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    opacity: 0;
+    transition: opacity .15s ease;
+    max-width: 280px;
+    z-index: 100;
+    backdrop-filter: blur(8px);
+  }
+  #lmaf-arch .arch-tooltip__title {
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 2px;
+  }
+  #lmaf-arch .arch-tooltip__sub {
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+  }
+  #lmaf-arch .arch-tooltip__body {
+    color: #ccc;
+    font-size: 12px;
+  }
+</style>
+
+<script>
+(() => {
+  const ensureD3 = (cb) => {
+    if (window.d3 && typeof window.d3.select === 'function') return cb();
+    let s = document.getElementById('d3-cdn-lmaf');
+    if (!s) {
+      s = document.createElement('script');
+      s.id = 'd3-cdn-lmaf';
+      s.src = 'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js';
+      document.head.appendChild(s);
+    }
+    s.addEventListener('load', () => { if (window.d3) cb(); }, { once: true });
+  };
+
+  ensureD3(() => {
+    const root = document.querySelector('#lmaf-arch');
+    if (!root || root.dataset.mounted === 'true') return;
+    root.dataset.mounted = 'true';
+    const d3 = window.d3;
+
+    const VB_W = 1100, VB_H = 620;
+
+    // Flow types
+    const FLOWS = [
+      { id: 'landscape', label: 'Правовий ландшафт', color: '#5b9bd5' },
+      { id: 'strategy',  label: 'Стратегія',         color: '#a855f7' },
+      { id: 'task',      label: 'Дослідне завдання', color: '#f59e0b' },
+      { id: 'evidence',  label: 'Докази',            color: '#10b981' },
+      { id: 'critique',  label: 'Критика',           color: '#ef4444' },
+      { id: 'verdict',   label: 'Вердикт',           color: '#f97316' },
+    ];
+    const flowById = Object.fromEntries(FLOWS.map(f => [f.id, f]));
+
+    // ConsultationState box
+    const STATE_BOX = {
+      x: 148, y: 345, w: 250, h: 430,
+      items: [
+        { text: 'Запит клієнта' },
+        { text: 'Юрисдикція' },
+        { text: 'Огляд ландшафту', flow: 'landscape' },
+        { text: 'Стратегія дослідження', flow: 'strategy' },
+        { text: 'Правові позиції (гіпотези)', flow: 'evidence' },
+        { text: 'Зібрані докази', flow: 'evidence' },
+        { text: 'Відкриті питання', flow: 'task' },
+        { text: 'Критичні зауваження', flow: 'critique' },
+        { text: 'Обчислення та строки' },
+        { text: 'Фінальна консультація' },
+      ]
+    };
+
+    // Agent definitions
+    const AGENTS = [
+      {
+        id: 'question', label: 'Запит клієнта', kind: 'io',
+        x: 148, y: 60, w: 190, h: 55,
+        tip: ['Запит клієнта', 'Вхідні дані', 'Правове питання від користувача, яке запускає мульти-агентний пайплайн.']
+      },
+      {
+        id: 'surveyor', label: 'Surveyor', kind: 'agent',
+        x: 440, y: 60, w: 190, h: 55,
+        tip: ['Surveyor', 'Запускається один раз', 'Будує карту правового ландшафту: визначає галузі права, релевантне законодавство, ключові правові інститути.']
+      },
+      {
+        id: 'planner', label: 'Planner', kind: 'agent',
+        x: 740, y: 60, w: 190, h: 55,
+        tip: ['Planner', 'До циклу + при критиці', 'Формує стратегію дослідження: які питання досліджувати, яке законодавство аналізувати, які гіпотези перевіряти.']
+      },
+      {
+        id: 'orchestrator', label: 'Orchestrator', kind: 'orchestrator',
+        x: 740, y: 210, w: 260, h: 90,
+        tip: ['Orchestrator', 'Серце циклу', 'Читає ConsultationState, формулює гіпотези, диспетчеризує завдання Researcher або Analyst, вирішує коли зупинитись.']
+      },
+      {
+        id: 'researcher', label: 'Researcher', kind: 'agent',
+        x: 620, y: 345, w: 165, h: 55,
+        tip: ['Researcher', 'Пошук практики', 'Шукає судову практику, законодавство та доктрину через SecondLayer API (100М+ рішень ЄДРСР).']
+      },
+      {
+        id: 'analyst', label: 'Analyst', kind: 'agent',
+        x: 860, y: 345, w: 155, h: 55,
+        tip: ['Analyst', 'Обчислення', 'Розраховує строки, пеню, 3% річних, інфляційні втрати, процесуальні дедлайни.']
+      },
+      {
+        id: 'reviewer', label: 'Reviewer', kind: 'agent',
+        x: 740, y: 435, w: 165, h: 55,
+        tip: ['Reviewer', 'Автоматична верифікація', 'Перевіряє кожен доказ: чи існує рішення, чи правильно цитовано, чи відповідає позиції. Вердикт: VERIFIED / REFUTED.']
+      },
+      {
+        id: 'critic', label: 'Critic', kind: 'agent',
+        x: 440, y: 435, w: 175, h: 55,
+        tip: ['Critic', 'Періодичний аудит', 'Аудит стратегії та повноти аналізу. Виявляє прогалини, суперечності, пропущені аргументи.']
+      },
+      {
+        id: 'adjudicator', label: 'Adjudicator', kind: 'agent',
+        x: 620, y: 540, w: 195, h: 55,
+        tip: ['Adjudicator', 'Незалежний арбітр', 'Арбітрує конфлікти між агентами. Єдиний хто може скасувати встановлену правову позицію.']
+      },
+      {
+        id: 'formatter', label: 'Formatter', kind: 'agent',
+        x: 970, y: 490, w: 175, h: 55,
+        tip: ['Formatter', 'Фінальний етап', 'Оформлює структуровану правову консультацію з посиланнями на НПА та судову практику.']
+      },
+      {
+        id: 'answer', label: 'Консультація', kind: 'io',
+        x: 970, y: 575, w: 160, h: 45,
+        tip: ['Консультація', 'Результат', 'Структурована правова консультація з обґрунтуванням, посиланнями та рекомендаціями.']
+      }
+    ];
+    const agentById = Object.fromEntries(AGENTS.map(a => [a.id, a]));
+
+    // Color palette for agents
+    const PALETTE_ORDER = [
+      'orchestrator','surveyor','planner','researcher',
+      'analyst','reviewer','critic','adjudicator','formatter'
+    ];
+    const agentPalette = [
+      '#6366f1','#5b9bd5','#a855f7','#10b981',
+      '#14b8a6','#f59e0b','#ef4444','#f97316','#ec4899'
+    ];
+    const agentColor = {};
+    PALETTE_ORDER.forEach((id, i) => { agentColor[id] = agentPalette[i]; });
+
+    // Edges
+    const EDGES = [
+      { from: 'question',     to: 'surveyor',     flow: 'landscape', label: '' },
+      { from: 'surveyor',     to: 'planner',      flow: 'strategy',  label: '' },
+      { from: 'planner',      to: 'orchestrator',  flow: 'strategy',  label: '' },
+      { from: 'orchestrator', to: 'researcher',    flow: 'task',      label: '' },
+      { from: 'orchestrator', to: 'analyst',       flow: 'task',      label: '' },
+      { from: 'researcher',   to: 'reviewer',      flow: 'evidence',  label: '' },
+      { from: 'analyst',      to: 'reviewer',      flow: 'evidence',  label: '' },
+      { from: 'reviewer',     to: 'orchestrator',  flow: 'evidence',  label: '' },
+      { from: 'critic',       to: 'planner',       flow: 'critique',  label: '' },
+      { from: 'critic',       to: 'adjudicator',   flow: 'critique',  label: '' },
+      { from: 'adjudicator',  to: 'orchestrator',  flow: 'verdict',   label: '' },
+      { from: 'orchestrator', to: 'formatter',     flow: 'evidence',  label: '' },
+      { from: 'formatter',    to: 'answer',        flow: 'evidence',  label: '' },
+    ];
+
+    // Build filter bar
+    const filterBar = document.createElement('div');
+    filterBar.className = 'filter-bar';
+    const filterLabel = document.createElement('span');
+    filterLabel.className = 'filter-bar__label';
+    filterLabel.textContent = 'Потоки:';
+    filterBar.appendChild(filterLabel);
+
+    const activeFlows = new Set(FLOWS.map(f => f.id));
+
+    FLOWS.forEach(f => {
+      const chip = document.createElement('button');
+      chip.className = 'filter-chip is-active';
+      chip.innerHTML = `<span class="chip-swatch" style="background:${f.color}"></span>${f.label}`;
+      chip.dataset.flow = f.id;
+      chip.addEventListener('click', () => {
+        if (activeFlows.has(f.id)) { activeFlows.delete(f.id); chip.classList.remove('is-active'); }
+        else { activeFlows.add(f.id); chip.classList.add('is-active'); }
+        updateVisibility();
+      });
+      filterBar.appendChild(chip);
+    });
+    root.appendChild(filterBar);
+
+    // Tooltip
+    const tooltip = document.createElement('div');
+    tooltip.className = 'arch-tooltip';
+    root.appendChild(tooltip);
+
+    // SVG
+    const svg = d3.select(root).append('svg')
+      .attr('viewBox', `0 0 ${VB_W} ${VB_H}`)
+      .attr('preserveAspectRatio', 'xMidYMid meet');
+
+    // Defs: arrow markers & glow
+    const defs = svg.append('defs');
+
+    FLOWS.forEach(f => {
+      defs.append('marker')
+        .attr('id', `arrow-${f.id}`)
+        .attr('viewBox', '0 0 10 10')
+        .attr('refX', 9).attr('refY', 5)
+        .attr('markerWidth', 7).attr('markerHeight', 7)
+        .attr('orient', 'auto-start-reverse')
+        .append('path')
+        .attr('d', 'M 0 1 L 10 5 L 0 9 Z')
+        .attr('fill', f.color);
+    });
+
+    // Glow filter
+    const glow = defs.append('filter').attr('id', 'glow');
+    glow.append('feGaussianBlur').attr('stdDeviation', '3').attr('result', 'blur');
+    glow.append('feMerge').selectAll('feMergeNode')
+      .data(['blur', 'SourceGraphic']).enter()
+      .append('feMergeNode').attr('in', d => d);
+
+    // Draw state box
+    const sb = STATE_BOX;
+    const stateG = svg.append('g').attr('class', 'state-group');
+
+    stateG.append('rect')
+      .attr('x', sb.x - sb.w/2).attr('y', sb.y - sb.h/2)
+      .attr('width', sb.w).attr('height', sb.h)
+      .attr('rx', 14).attr('ry', 14)
+      .attr('fill', 'rgba(255,255,255,0.03)')
+      .attr('stroke', 'rgba(255,255,255,0.12)')
+      .attr('stroke-width', 1.4)
+      .attr('stroke-dasharray', '6 4');
+
+    stateG.append('text')
+      .attr('x', sb.x).attr('y', sb.y - sb.h/2 + 24)
+      .attr('text-anchor', 'middle')
+      .attr('fill', '#999')
+      .attr('font-size', '12px')
+      .attr('font-weight', '600')
+      .attr('letter-spacing', '0.06em')
+      .text('CONSULTATION STATE');
+
+    sb.items.forEach((item, i) => {
+      const yPos = sb.y - sb.h/2 + 50 + i * 36;
+      stateG.append('rect')
+        .attr('x', sb.x - sb.w/2 + 14)
+        .attr('y', yPos - 12)
+        .attr('width', sb.w - 28)
+        .attr('height', 28)
+        .attr('rx', 6)
+        .attr('fill', item.flow ? `${flowById[item.flow].color}15` : 'rgba(255,255,255,0.04)')
+        .attr('stroke', item.flow ? `${flowById[item.flow].color}40` : 'rgba(255,255,255,0.06)')
+        .attr('stroke-width', 0.8);
+
+      stateG.append('text')
+        .attr('x', sb.x)
+        .attr('y', yPos + 4)
+        .attr('text-anchor', 'middle')
+        .attr('fill', item.flow ? flowById[item.flow].color : '#aaa')
+        .attr('font-size', '11px')
+        .text(item.text);
+    });
+
+    // Edge routing helper
+    function edgePath(from, to) {
+      const a = agentById[from], b = agentById[to];
+      const ax = a.x, ay = a.y, bx = b.x, by = b.y;
+      const dx = bx - ax, dy = by - ay;
+
+      // Exit/entry points on box edges
+      let sx, sy, ex, ey;
+
+      if (Math.abs(dx) > Math.abs(dy) * 0.6) {
+        // Horizontal-ish
+        sx = ax + (dx > 0 ? a.w/2 : -a.w/2);
+        sy = ay;
+        ex = bx + (dx > 0 ? -b.w/2 : b.w/2);
+        ey = by;
+      } else {
+        // Vertical-ish
+        sx = ax;
+        sy = ay + (dy > 0 ? a.h/2 : -a.h/2);
+        ex = bx;
+        ey = by + (dy > 0 ? -b.h/2 : b.h/2);
+      }
+
+      // Curved path
+      const mx = (sx + ex) / 2, my = (sy + ey) / 2;
+      if (Math.abs(sx - ex) < 5 || Math.abs(sy - ey) < 5) {
+        return `M ${sx} ${sy} L ${ex} ${ey}`;
+      }
+      return `M ${sx} ${sy} C ${sx} ${my}, ${ex} ${my}, ${ex} ${ey}`;
+    }
+
+    // Draw edges
+    const edgeGroup = svg.append('g').attr('class', 'edges');
+
+    EDGES.forEach(e => {
+      const flow = flowById[e.flow];
+      const path = edgePath(e.from, e.to);
+
+      // Glow under-path
+      edgeGroup.append('path')
+        .attr('d', path)
+        .attr('fill', 'none')
+        .attr('stroke', flow.color)
+        .attr('stroke-width', 4)
+        .attr('opacity', 0.15)
+        .attr('data-flow', e.flow)
+        .attr('class', 'edge-glow');
+
+      // Main path
+      edgeGroup.append('path')
+        .attr('d', path)
+        .attr('fill', 'none')
+        .attr('stroke', flow.color)
+        .attr('stroke-width', 1.8)
+        .attr('opacity', 0.7)
+        .attr('marker-end', `url(#arrow-${e.flow})`)
+        .attr('data-flow', e.flow)
+        .attr('class', 'edge-main');
+
+      // Animated dash
+      const totalLen = 400;
+      edgeGroup.append('path')
+        .attr('d', path)
+        .attr('fill', 'none')
+        .attr('stroke', flow.color)
+        .attr('stroke-width', 2.2)
+        .attr('opacity', 0.9)
+        .attr('stroke-dasharray', '8 20')
+        .attr('data-flow', e.flow)
+        .attr('class', 'edge-animated')
+        .style('animation', `dash-flow ${2 + Math.random()}s linear infinite`);
+    });
+
+    // Draw agents
+    const agentGroup = svg.append('g').attr('class', 'agents');
+
+    AGENTS.forEach(a => {
+      const g = agentGroup.append('g')
+        .attr('class', `agent agent--${a.kind}`)
+        .attr('data-id', a.id)
+        .style('cursor', 'pointer');
+
+      const color = a.kind === 'io' ? '#64748b' :
+                    a.kind === 'orchestrator' ? agentColor.orchestrator :
+                    agentColor[a.id] || '#888';
+
+      // Shadow
+      g.append('rect')
+        .attr('x', a.x - a.w/2 + 2).attr('y', a.y - a.h/2 + 2)
+        .attr('width', a.w).attr('height', a.h)
+        .attr('rx', a.kind === 'orchestrator' ? 14 : 10)
+        .attr('fill', 'rgba(0,0,0,0.3)');
+
+      // Box
+      g.append('rect')
+        .attr('x', a.x - a.w/2).attr('y', a.y - a.h/2)
+        .attr('width', a.w).attr('height', a.h)
+        .attr('rx', a.kind === 'orchestrator' ? 14 : 10)
+        .attr('fill', a.kind === 'io' ? 'rgba(100,116,139,0.15)' : `${color}18`)
+        .attr('stroke', a.kind === 'io' ? 'rgba(100,116,139,0.4)' : `${color}60`)
+        .attr('stroke-width', a.kind === 'orchestrator' ? 2 : 1.4)
+        .attr('class', 'agent-box');
+
+      // Label
+      g.append('text')
+        .attr('x', a.x).attr('y', a.y + 1)
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'central')
+        .attr('fill', a.kind === 'io' ? '#94a3b8' : '#e0e0e0')
+        .attr('font-size', a.kind === 'orchestrator' ? '16px' : '14px')
+        .attr('font-weight', a.kind === 'orchestrator' ? '700' : '600')
+        .text(a.label);
+
+      if (a.kind === 'orchestrator') {
+        g.append('text')
+          .attr('x', a.x).attr('y', a.y + 22)
+          .attr('text-anchor', 'middle')
+          .attr('fill', '#888')
+          .attr('font-size', '11px')
+          .text('координація та гіпотези');
+      }
+
+      // Hover
+      g.on('mouseenter', (event) => {
+        if (!a.tip) return;
+        g.select('.agent-box')
+          .transition().duration(150)
+          .attr('stroke-width', 2.5)
+          .attr('filter', 'url(#glow)');
+
+        tooltip.innerHTML = `
+          <div class="arch-tooltip__title" style="color:${color}">${a.tip[0]}</div>
+          <div class="arch-tooltip__sub">${a.tip[1]}</div>
+          <div class="arch-tooltip__body">${a.tip[2]}</div>
+        `;
+        tooltip.style.opacity = '1';
+
+        const rect = root.getBoundingClientRect();
+        const svgRect = root.querySelector('svg').getBoundingClientRect();
+        const scaleX = svgRect.width / VB_W;
+        const px = (a.x + a.w/2) * scaleX + svgRect.left - rect.left + 10;
+        const py = (a.y - a.h/2) * (svgRect.height / VB_H) + svgRect.top - rect.top;
+        tooltip.style.left = Math.min(px, rect.width - 300) + 'px';
+        tooltip.style.top = py + 'px';
+      })
+      .on('mouseleave', () => {
+        g.select('.agent-box')
+          .transition().duration(200)
+          .attr('stroke-width', a.kind === 'orchestrator' ? 2 : 1.4)
+          .attr('filter', null);
+        tooltip.style.opacity = '0';
+      });
+    });
+
+    // Loop indicator
+    const loopG = svg.append('g').attr('class', 'loop-indicator');
+    loopG.append('rect')
+      .attr('x', 370).attr('y', 165)
+      .attr('width', 680).attr('height', 355)
+      .attr('rx', 20)
+      .attr('fill', 'none')
+      .attr('stroke', 'rgba(255,255,255,0.06)')
+      .attr('stroke-width', 1.5)
+      .attr('stroke-dasharray', '8 6');
+
+    loopG.append('text')
+      .attr('x', 710).attr('y', 185)
+      .attr('text-anchor', 'middle')
+      .attr('fill', 'rgba(255,255,255,0.2)')
+      .attr('font-size', '11px')
+      .attr('letter-spacing', '0.1em')
+      .text('ДОСЛІДНИЦЬКИЙ ЦИКЛ (до 15 ітерацій)');
+
+    // Critic connection to loop (periodic)
+    loopG.append('text')
+      .attr('x', 440).attr('y', 490 + 18)
+      .attr('text-anchor', 'middle')
+      .attr('fill', 'rgba(255,255,255,0.25)')
+      .attr('font-size', '10px')
+      .text('кожні 3 ітерації');
+
+    // CSS animation
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes dash-flow {
+        to { stroke-dashoffset: -56; }
+      }
+    `;
+    document.head.appendChild(style);
+
+    // Visibility toggle
+    function updateVisibility() {
+      svg.selectAll('.edge-main, .edge-glow, .edge-animated').each(function() {
+        const flow = this.getAttribute('data-flow');
+        d3.select(this).transition().duration(300)
+          .attr('opacity', activeFlows.has(flow) ?
+            (this.classList.contains('edge-glow') ? 0.15 :
+             this.classList.contains('edge-animated') ? 0.9 : 0.7) : 0.05);
+      });
+    }
+
+    // Entry animation: fade in agents sequentially
+    agentGroup.selectAll('.agent')
+      .style('opacity', 0)
+      .transition()
+      .delay((d, i) => i * 80)
+      .duration(400)
+      .style('opacity', 1);
+
+    edgeGroup.selectAll('path')
+      .style('opacity', 0)
+      .transition()
+      .delay(600)
+      .duration(800)
+      .style('opacity', function() {
+        if (this.classList.contains('edge-glow')) return 0.15;
+        if (this.classList.contains('edge-animated')) return 0.9;
+        return 0.7;
+      });
+  });
+})();
+</script>
