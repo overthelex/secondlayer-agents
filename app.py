@@ -1,13 +1,11 @@
 """LMAF (Legal Multi-Agent Framework) Gradio chat app.
 
 Chat interface for multi-agent legal consultation pipeline.
-On prod (agents.legal.org.ua): runs the real pipeline with LLM + SecondLayer API.
-On HF Space: proxies to prod via gr.load().
+Runs on prod (agents.legal.org.ua) and HuggingFace Space.
 """
 
 from __future__ import annotations
 
-import asyncio
 import os
 import sys
 from pathlib import Path
@@ -37,105 +35,73 @@ async def _run_pipeline(question: str):
     """Run the multi-agent pipeline and yield status updates."""
     from lmaf.core.config import Config
     from lmaf.engine import LMAF
+    from lmaf.state.research_state import CritiqueStatus
 
     config = Config.from_env()
-    intern = LMAF(question, config)
+    lmaf = LMAF(question, config)
 
     yield "Surveyor: аналізую правовий ландшафт..."
-    result = await intern.surveyor.run(intern.state)
-    intern._loop.survey_done = True
-    if intern.state.survey_summary:
-        yield f"**Огляд**: {intern.state.survey_summary[:300]}"
+    await lmaf.surveyor.run(lmaf.state)
+    lmaf._loop.survey_done = True
+    if lmaf.state.survey_summary:
+        yield f"**Огляд**: {lmaf.state.survey_summary[:300]}"
 
     yield "Planner: розробляю стратегію дослідження..."
-    result = await intern.planner.run(intern.state)
-    intern._loop.plan_done = True
-    if intern.state.strategy.approach:
-        yield f"**Стратегія**: {intern.state.strategy.approach[:300]}"
+    await lmaf.planner.run(lmaf.state)
+    lmaf._loop.plan_done = True
+    if lmaf.state.strategy.approach:
+        yield f"**Стратегія**: {lmaf.state.strategy.approach[:300]}"
 
     for iteration in range(1, config.max_iterations + 1):
-        intern.state.iteration = iteration
+        lmaf.state.iteration = iteration
 
         yield f"Ітерація {iteration}: Orchestrator вирішує наступний крок..."
-        orch_result = await intern.orchestrator.run(intern.state)
+        orch_result = await lmaf.orchestrator.run(lmaf.state)
 
         if not orch_result.success:
-            if intern._loop.consecutive_failures >= config.max_consecutive_failures:
+            if lmaf._loop.consecutive_failures >= config.max_consecutive_failures:
                 yield "Занадто багато послідовних помилок, зупиняюсь."
                 break
             continue
 
-        yield f"Researcher: шукаю судову практику та законодавство..."
-        agent_result = await intern.researcher.run(
-            intern.state, task_description=orch_result.summary
+        yield "Researcher: шукаю судову практику та законодавство..."
+        agent_result = await lmaf.researcher.run(
+            lmaf.state, task_description=orch_result.summary
         )
         if agent_result.success:
             yield f"**Знайдено**: {agent_result.summary[:200]}"
 
         yield "Reviewer: верифікую докази та посилання..."
-        review_result = await intern.reviewer.run(intern.state)
+        await lmaf.reviewer.run(lmaf.state)
 
         if iteration % config.critic_every_n == 0:
             yield "Critic: аудит стратегії та повноти аналізу..."
-            critic_result = await intern.critic.run(intern.state)
-            intern._loop.last_critic_iteration = iteration
+            critic_result = await lmaf.critic.run(lmaf.state)
+            lmaf._loop.last_critic_iteration = iteration
 
-            for critique in intern.state.active_critiques():
+            for critique in lmaf.state.active_critiques():
                 if critique.type == "strategy":
-                    await intern.planner.run(
-                        intern.state, revision_critique=critique.details
+                    await lmaf.planner.run(
+                        lmaf.state, revision_critique=critique.details
                     )
-                    from lmaf.state.research_state import CritiqueStatus
                     critique.status = CritiqueStatus.RESOLVED
 
             if "можна завершувати: True" in critic_result.summary:
                 yield "Critic схвалив -- формую консультацію."
                 break
 
-        if not intern.state.open_questions() and not intern.state.active_critiques():
+        if not lmaf.state.open_questions() and not lmaf.state.active_critiques():
             yield "Всі питання вирішено -- формую консультацію."
             break
 
     yield "Formatter: оформлюю фінальну консультацію..."
-    await intern.formatter.run(intern.state)
+    await lmaf.formatter.run(lmaf.state)
 
-    yield intern.state.answer or "Не вдалося сформувати відповідь."
-
-
-def chat_fn(message: str, history: list[dict]) -> str:
-    """Synchronous wrapper that runs the async pipeline."""
-    if not message.strip():
-        return "Будь ласка, опишіть вашу правову ситуацію."
-
-    if not has_api_keys():
-        return (
-            "API ключі не налаштовано. Цей інстанс працює в демо-режимі.\n\n"
-            "Для реальних консультацій використовуйте "
-            "[agents.legal.org.ua](https://agents.legal.org.ua)."
-        )
-
-    final = ""
-    for update in _run_sync(message):
-        final = update
-    return final
+    yield lmaf.state.answer or "Не вдалося сформувати відповідь."
 
 
-def _run_sync(question: str):
-    """Run async generator synchronously, collecting results."""
-    loop = asyncio.new_event_loop()
-    gen = _run_pipeline(question)
-    try:
-        while True:
-            result = loop.run_until_complete(gen.__anext__())
-            yield result
-    except StopAsyncIteration:
-        pass
-    finally:
-        loop.close()
-
-
-def stream_chat(message: str, history: list[dict]):
-    """Streaming chat handler -- yields incremental updates."""
+async def stream_chat(message: str, history: list[dict]):
+    """Async streaming chat handler -- yields incremental updates."""
     if not message.strip():
         yield "Будь ласка, опишіть вашу правову ситуацію."
         return
@@ -149,17 +115,17 @@ def stream_chat(message: str, history: list[dict]):
         return
 
     accumulated = ""
-    for update in _run_sync(message):
+    status_prefixes = (
+        "Surveyor", "Planner", "Ітерація", "Researcher",
+        "Reviewer", "Critic", "Formatter", "Всі", "Занадто",
+    )
+    async for update in _run_pipeline(message):
         if update.startswith("**") or update.startswith("#"):
             accumulated += f"\n\n{update}"
-        elif not update.startswith("Surveyor") and not update.startswith("Planner") \
-                and not update.startswith("Ітерація") and not update.startswith("Researcher") \
-                and not update.startswith("Reviewer") and not update.startswith("Critic") \
-                and not update.startswith("Formatter") and not update.startswith("Всі") \
-                and not update.startswith("Занадто"):
-            accumulated = update
-        else:
+        elif update.startswith(status_prefixes):
             accumulated += f"\n\n__{update}__"
+        else:
+            accumulated = update
         yield accumulated
 
 
