@@ -248,7 +248,6 @@ def build_app() -> gr.Blocks:
             with gr.Tab("Чат"):
                 chatbot = gr.ChatInterface(
                     fn=stream_chat,
-                    type="messages",
                     examples=EXAMPLES,
                     title=None,
                     chatbot=gr.Chatbot(
