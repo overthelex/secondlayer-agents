@@ -122,7 +122,7 @@
     root.dataset.mounted = 'true';
     const d3 = window.d3;
 
-    const VB_W = 1100, VB_H = 620;
+    const VB_W = 1100, VB_H = 660;
 
     // Flow types
     const FLOWS = [
@@ -235,6 +235,7 @@
       { from: 'analyst',      to: 'reviewer',      flow: 'evidence',  label: '' },
       { from: 'reviewer',     to: 'orchestrator',  flow: 'evidence',  label: '' },
       { from: 'critic',       to: 'planner',       flow: 'critique',  label: '' },
+      { from: 'critic',       to: 'orchestrator',  flow: 'critique',  label: '' },
       { from: 'critic',       to: 'adjudicator',   flow: 'critique',  label: '' },
       { from: 'adjudicator',  to: 'orchestrator',  flow: 'verdict',   label: '' },
       { from: 'orchestrator', to: 'formatter',     flow: 'evidence',  label: '' },
