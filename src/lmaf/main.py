@@ -1,4 +1,4 @@
-"""CLI entrypoint for LegalIntern."""
+"""CLI entrypoint for LMAF."""
 
 from __future__ import annotations
 
@@ -8,11 +8,11 @@ import sys
 from pathlib import Path
 
 from .core.config import Config
-from .engine import LegalIntern
+from .engine import LMAF
 
 
 def cli() -> None:
-    parser = argparse.ArgumentParser(description="LegalIntern -- multi-agent legal consultation")
+    parser = argparse.ArgumentParser(description="LMAF -- Legal Multi-Agent Framework")
     parser.add_argument("question", nargs="?", help="Legal question (or path to .yaml problem file)")
     parser.add_argument("--model", default=None, help="Override default LLM model")
     parser.add_argument("--max-iterations", type=int, default=None)
@@ -24,7 +24,6 @@ def cli() -> None:
         parser.print_help()
         sys.exit(1)
 
-    # Load config
     if args.config and args.config.exists():
         config = Config.from_yaml(args.config)
     else:
@@ -37,7 +36,6 @@ def cli() -> None:
     if args.workspace_dir:
         config.workspace_dir = args.workspace_dir
 
-    # Load question from file or use directly
     question = args.question
     if Path(question).exists():
         import yaml
@@ -45,8 +43,8 @@ def cli() -> None:
         data = yaml.safe_load(Path(question).read_text())
         question = data.get("question", data.get("problem", question))
 
-    intern = LegalIntern(question, config)
-    answer = asyncio.run(intern.run())
+    engine = LMAF(question, config)
+    answer = asyncio.run(engine.run())
 
     print("\n" + "=" * 60)
     print(answer)

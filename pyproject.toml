@@ -1,5 +1,5 @@
 [project]
-name = "legal-intern"
+name = "lmaf"
 version = "0.1.0"
 description = "Multi-agent scaffolding for complex legal consultations over Ukrainian court decisions"
 readme = "README.md"
@@ -35,7 +35,7 @@ all-providers = [
 ]
 
 [project.scripts]
-legal-intern = "legal_intern.main:cli"
+lmaf = "lmaf.main:cli"
 
 [build-system]
 requires = ["hatchling"]

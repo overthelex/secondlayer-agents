@@ -28,7 +28,7 @@ class AgentResult:
 
 
 class BaseAgent(ABC):
-    """Base class for all LegalIntern agents."""
+    """Base class for all LMAF agents."""
 
     role: str = "base"
     description: str = ""

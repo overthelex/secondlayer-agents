@@ -1,4 +1,4 @@
-name: Deploy LegalIntern
+name: Deploy LMAF
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-legal-intern
+  group: deploy-lmaf
   cancel-in-progress: false
 
 jobs:
@@ -22,25 +22,25 @@ jobs:
         run: |
           ssh prod "cd ~/SecondLayer/deployment && \
             docker compose -f docker-compose.prod.yml --env-file .env.prod \
-            build --no-cache legal-intern-prod"
+            build --no-cache lmaf-prod"
 
       - name: Start container
         run: |
           ssh prod "cd ~/SecondLayer/deployment && \
             docker compose -f docker-compose.prod.yml --env-file .env.prod \
-            up -d legal-intern-prod"
+            up -d lmaf-prod"
 
       - name: Health check
         run: |
           for i in $(seq 1 45); do
-            if ssh prod "docker exec legal-intern-prod python -c \"import urllib.request; urllib.request.urlopen('http://localhost:7860/')\"" 2>/dev/null; then
+            if ssh prod "docker exec lmaf-prod python -c \"import urllib.request; urllib.request.urlopen('http://localhost:7860/')\"" 2>/dev/null; then
               echo "Container healthy after $((i*2))s"
               exit 0
             fi
             sleep 2
           done
           echo "Health check failed"
-          ssh prod "docker logs --tail 30 legal-intern-prod" || true
+          ssh prod "docker logs --tail 30 lmaf-prod" || true
           exit 1
 
   sync-hf:

@@ -1,4 +1,4 @@
-"""LLM provider abstraction layer -- AWS Bedrock only."""
+"""LMAF LLM provider -- AWS Bedrock only."""
 
 from __future__ import annotations
 

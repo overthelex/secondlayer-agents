@@ -1,5 +1,5 @@
 ---
-title: LegalIntern
+title: LMAF
 emoji: ⚖️
 colorFrom: blue
 colorTo: indigo
@@ -16,11 +16,11 @@ tags:
   - legal-consultation
 ---
 
-# LegalIntern
+# LMAF -- Legal Multi-Agent Framework
 
-A multi-agent scaffolding system for **complex legal consultations** over Ukrainian court decisions and legislation.
+A multi-agent framework for **complex legal consultations** over Ukrainian court decisions and legislation.
 
-Inspired by [PhysicsIntern](https://huggingface.co/spaces/huggingface/physics-intern)'s multi-agent research pipeline, adapted for the legal domain with access to 100M+ Ukrainian court decisions via [SecondLayer](https://legal.org.ua).
+Built for the legal domain with access to 100M+ Ukrainian court decisions via [SecondLayer](https://legal.org.ua).
 
 ## Architecture
 
@@ -103,10 +103,10 @@ export ANTHROPIC_API_KEY=sk-...
 export SECONDLAYER_API_KEY=...
 
 # Run a consultation
-legal-intern "Чи може продавець стягнути пеню за прострочення оплати товару?"
+lmaf "Чи може продавець стягнути пеню за прострочення оплати товару?"
 
 # Run from a problem file
-legal-intern problems/consumer_penalty.yaml
+lmaf problems/consumer_penalty.yaml
 ```
 
 ## Example Problems
