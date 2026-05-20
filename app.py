@@ -274,11 +274,5 @@ def build_app() -> gr.Blocks:
 
 
 if __name__ == "__main__":
-    is_hf_space = bool(os.environ.get("SPACE_ID"))
-
-    if is_hf_space and not has_api_keys():
-        demo = gr.load("https://agents.legal.org.ua")
-    else:
-        demo = build_app()
-
+    demo = build_app()
     demo.launch()
