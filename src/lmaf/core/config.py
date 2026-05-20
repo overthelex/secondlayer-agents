@@ -15,7 +15,7 @@ class Config:
 
     # LLM provider
     default_provider: str = "anthropic"
-    default_model: str = "us.anthropic.claude-sonnet-4-6-20250514-v1:0"
+    default_model: str = "eu.anthropic.claude-sonnet-4-6"
 
     # Per-agent model overrides
     model_overrides: dict[str, str] = field(default_factory=dict)
